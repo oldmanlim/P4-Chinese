@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P4 Chinese Vocabulary Challenge</title>
+    <style>
+        :root { --p: #27ae60; --s: #2c3e50; --bg: #effaf3; --white: #ffffff; }
+        body { font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; justify-content: center; }
+        .quiz-card { width: 100%; max-width: 500px; background: var(--white); padding: 20px; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-top: 5px solid var(--p); }
+        .header { text-align: center; margin-bottom: 20px; }
+        .prog-bg { height: 8px; background: #eee; border-radius: 4px; margin-bottom: 20px; overflow: hidden; }
+        .prog-fill { height: 100%; background: var(--p); width: 0%; transition: 0.4s; }
+        .cat-tag { font-size: 0.8rem; font-weight: bold; color: var(--p); border: 1px solid var(--p); padding: 2px 8px; border-radius: 5px; background: #eafaf1; }
+        .q-text { font-size: 1.25rem; font-weight: 600; margin: 20px 0; line-height: 1.6; color: var(--s); }
+        .opt-grid { display: flex; flex-direction: column; gap: 12px; }
+        .opt-btn { padding: 15px; border: 2px solid #eee; border-radius: 12px; background: #fff; text-align: left; cursor: pointer; font-size: 1.1rem; transition: 0.2s; color: #444; }
+        .opt-btn:hover { border-color: var(--p); background: #f9fdfa; }
+        .opt-btn.selected { border-color: var(--p); background: #eafaf1; color: var(--p); font-weight: bold; }
+        .feedback { margin-top: 15px; padding: 15px; border-radius: 10px; display: none; line-height: 1.5; font-size: 0.95rem; }
+        .feedback.correct { display: block; background: #e9f7ef; color: #1e8449; border: 1px solid #2ecc71; }
+        .feedback.wrong { display: block; background: #fdedec; color: #943126; border: 1px solid #e74c3c; }
+        button.main-btn { width: 100%; padding: 16px; border-radius: 12px; border: none; font-weight: bold; font-size: 1.1rem; cursor: pointer; margin-top: 20px; transition: 0.3s; }
+        .confirm { background: var(--s); color: white; }
+        .confirm:disabled { opacity: 0.3; cursor: not-allowed; }
+        .next { background: var(--p); color: white; display: none; }
+        .result-score { font-size: 4rem; color: var(--p); margin: 10px 0; }
+    </style>
+</head>
+<body>
+
+<div class="quiz-card">
+    <div id="quiz-ui">
+        <div class="header">
+            <h2 style="margin:0; color:var(--p)">P4 华文：词语大挑战</h2>
+            <p id="q-counter" style="color:#666; font-size:0.9rem;">趣味练习 10 题</p>
+        </div>
+        <div class="prog-bg"><div class="prog-fill" id="prog-bar"></div></div>
+
+        <div id="question-area">
+            <span class="cat-tag" id="q-cat"></span>
+            <div class="q-text" id="q-text"></div>
+            <div class="opt-grid" id="opt-grid"></div>
+            <div id="feedback" class="feedback"></div>
+            <div class="btn-group">
+                <button id="btn-confirm" class="main-btn confirm" disabled onclick="confirmAnswer()">确定 (Confirm)</button>
+                <button id="btn-next" class="main-btn next" onclick="nextQuestion()">下一题 (Next Question)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="result-ui" style="display:none; text-align:center;">
+        <h2 style="color:var(--s)">太棒了！练习完成</h2>
+        <div class="result-score" id="final-score">0/10</div>
+        <p id="praise-text" style="color:#666; margin-bottom:20px;"></p>
+        <button class="main-btn confirm" onclick="generateNewSet()">再挑战一次 (Try Again)</button>
+    </div>
+</div>
+
+<script>
+    const p4Bank = [
+        { 
+            "category": "词语搭配 (Collocation)", 
+            "question": "我们要________交通规则，过马路时要小心。", 
+            "options": ["遵守", "通过", "了解", "指挥"], 
+            "correctIdx": 0, 
+            "explanation": "【遵守】(zūn shǒu) 规则 (Obey rules)。这是非常重要的生活好习惯。" 
+        },
+        { 
+            "category": "词语辨析 (Vocabulary)", 
+            "question": "那个小男孩非常勇敢，受伤了也________痛。", 
+            "options": ["一点儿也不", "十分", "非常", "特别"], 
+            "correctIdx": 0, 
+            "explanation": "【一点儿也不】(not at all) 痛。表示他很勇敢 (brave)。" 
+        },
+        { 
+            "category": "辨析字 (Character Diff)", 
+            "question": "弟弟口渴了，想要________水。", 
+            "options": ["喝", "渴", "颗", "可"], 
+            "correctIdx": 0, 
+            "explanation": "【喝】水用口(口字旁)。口【渴】是因为缺水(三点水)。" 
+        },
+        { 
+            "category": "词语选择 (Vocab)", 
+            "question": "看到老奶奶没有位子坐，那位乘客主动给奶奶________。", 
+            "options": ["占位子", "让位子", "推开门", "关风扇"], 
+            "correctIdx": 1, 
+            "explanation": "【让位子】(give up seat) 是有礼貌、尊敬长辈的表现。" 
+        },
+        { 
+            "category": "成语/短语 (Phrases)", 
+            "question": "陈叔叔看到路人有难，立刻上前帮忙，大家都称赞他________。", 
+            "options": ["见义勇为", "灵机一动", "不慌不忙", "垂头丧气"], 
+            "correctIdx": 0, 
+            "explanation": "【见义勇为】(jiàn yì yǒng wéi) 指勇敢地做正义的事。" 
+        },
+        { 
+            "category": "汉语拼音 (Pinyin)", 
+            "question": "昨晚我太兴奋了，半夜还【睁】着眼睛。选出“睁”的读音。", 
+            "options": ["zhēng", "zhèng", "zēng", "zhēn"], 
+            "correctIdx": 0, 
+            "explanation": "【睁】(zhēng) 开眼睛。注意是第一声。" 
+        },
+        { 
+            "category": "关联词 (Connectors)", 
+            "question": "________明天的天气凉爽，我们________去植物园野餐。", 
+            "options": ["如果...就", "不但...而且", "虽然...但是", "因为...所以"], 
+            "correctIdx": 0, 
+            "explanation": "【如果...就】表示假设 (If...then...)。明年的野餐还没发生。" 
+        },
+        { 
+            "category": "词语辨析 (Meaning)", 
+            "question": "由于刚才在学校跌倒了，他的腿正在________。", 
+            "options": ["流血", "流泪", "发烧", "微笑"], 
+            "correctIdx": 0, 
+            "explanation": "跌倒了会【流血】(bleeding)。流泪是因为难过。" 
+        },
+        { 
+            "category": "词语搭配 (Collocation)", 
+            "question": "小明向老师道歉，并________以后不会再迟到了。", 
+            "options": ["保证", "保存", "保护", "打听"], 
+            "correctIdx": 0, 
+            "explanation": "【保证】(guarantee/promise) 以后不再犯错。" 
+        },
+        { 
+            "category": "生活应用 (Context)", 
+            "question": "天空突然乌云密布，不一会儿就下起了________。", 
+            "options": ["倾盆大雨", "一阵欢呼", "热烈讨论", "满头大汗"], 
+            "correctIdx": 0, 
+            "explanation": "【倾盆大雨】(pouring rain) 形容雨下得非常大。" 
+        },
+        { 
+            "category": "词语选择 (Vocab)", 
+            "question": "这部________共有三十集，非常精彩。", 
+            "options": ["连续剧", "漫画书", "词典", "告示牌"], 
+            "correctIdx": 0, 
+            "explanation": "【连续剧】(TV Drama) 是一集一集播放的。" 
+        },
+        { 
+            "category": "辨析字 (Character Diff)", 
+            "question": "妹妹做错了事，感到很________悔。", 
+            "options": ["后", "候", "厚", "河"], 
+            "correctIdx": 0, 
+            "explanation": "【后悔】(regret) 是 P4 必考词语。'候'是时间(时候)。" 
+        },
+        { 
+            "category": "词语搭配 (Collocation)", 
+            "question": "老师________我们，考试时要仔细看题目。", 
+            "options": ["提醒", "提着", "提高", "提取"], 
+            "correctIdx": 0, 
+            "explanation": "【提醒】(remind) 别人注意某些事情。" 
+        },
+        { 
+            "category": "完成句子 (Logic)", 
+            "question": "既然你已经知道错了，就应该诚恳地________。", 
+            "options": ["道歉", "欢呼", "继续", "离开"], 
+            "correctIdx": 0, 
+            "explanation": "知错就改，应该向人【道歉】(apologize)。" 
+        },
+        { 
+            "category": "词语辨析 (Meaning)", 
+            "question": "妈妈生病了，我________在家里照顾她。", 
+            "options": ["留", "流", "溜", "柳"], 
+            "correctIdx": 0, 
+            "explanation": "【留】(stay) 在家里。'流'是液体流动。" 
+        },
+      {
+    "category": "词义辨析",
+    "question": "马路上发生了车祸，路过的居民立刻上前 ________ 情况，看有没有人受伤。",
+    "options": ["了解", "理解", "解释", "解决"],
+    "correctIdx": 0,
+    "explanation": "【了解】(liǎo jiě) To understand/find out. In an accident, people try to 'find out' (了解) the situation."
+  },
+  {
+    "category": "词语搭配",
+    "question": "用餐后，我们应该自动把碗盘 ________ 到收集处，做一个有责任感的人。",
+    "options": ["归还", "送回", "回去", "拿走"],
+    "correctIdx": 0,
+    "explanation": "【归还】(guī huán) Return. '归还碗盘' is the standard Singapore term for returning trays/crockery."
+  },
+  {
+    "category": "辨析字",
+    "question": "弟弟跑了太久，现在觉得口 ________ 了，想喝一大杯水。",
+    "options": ["渴", "喝", "颗", "可"],
+    "correctIdx": 0,
+    "explanation": "【渴】(kě) Thirsty. Uses the water radical (三点水). '喝' (drink) uses the mouth radical (口字旁)."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 他的身体很胖，________ 他的动作非常敏捷，是个运动健儿。",
+    "options": ["虽然...但是", "不但...而且", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】(suī rán...dàn shì) Although...but. Used here to show contrast between his weight and speed."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "那场魔术表演非常精【彩】，全场响起了掌声。选出正确的拼音。",
+    "options": ["cǎi", "chǎi", "zǎi", "sǎi"],
+    "correctIdx": 0,
+    "explanation": "【彩】(cǎi) Brilliant/Wonderful. It is a flat tongue sound (平舌音)."
+  },
+  {
+    "category": "词语搭配",
+    "question": "交通警察正在路口 ________ 交通，确保车辆顺利通过。",
+    "options": ["指挥", "指点", "指导", "指向"],
+    "correctIdx": 0,
+    "explanation": "【指挥】(zhǐ huī) Command/Direct. '指挥交通' is the standard collocation for traffic control."
+  },
+  {
+    "category": "辨析字",
+    "question": "小明因为 ________ 了一个谎，心里感到非常难过。",
+    "options": ["说", "语", "读", "话"],
+    "correctIdx": 0,
+    "explanation": "【说】(shuō) To speak. '说谎' (to tell a lie) is the correct verb phrase."
+  },
+  {
+    "category": "词义辨析",
+    "question": "看到老奶奶没有位子坐，那位年轻人立刻 ________，让老奶奶坐下。",
+    "options": ["让座", "坐下", "离开", "睡觉"],
+    "correctIdx": 0,
+    "explanation": "【让座】(ràng zuò) Give up a seat. This is a polite and socially responsible action in Singapore."
+  },
+  {
+    "category": "关联词",
+    "question": "这种炸鸡 ________ 味道很香，________ 价格也很便宜，非常受欢迎。",
+    "options": ["不但...而且", "因为...所以", "虽然...但是", "只要...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】(bú dàn...ér qiě) Not only...but also. Used to list two positive attributes."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "由于刚才在学校跌倒了，他的腿正在流【血】。选出正确的拼音。",
+    "options": ["xuè", "xiě", "xué", "xiè"],
+    "correctIdx": 1,
+    "explanation": "【血】(xiě) Blood. In spoken context like an injury, it is usually pronounced 'xiě'."
+  },
+  {
+    "category": "辨析字",
+    "question": "妹妹做错了事，心里感到很 ________ 悔。",
+    "options": ["后", "候", "厚", "河"],
+    "correctIdx": 0,
+    "explanation": "【后】(hòu) Back/After. '后悔' (regret). '候' is used in '时候' (time)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "看到路人遇到困难，陈叔叔立刻上前帮忙，大家都赞他 ________。",
+    "options": ["见义勇为", "灵机一动", "自言自语", "得过且过"],
+    "correctIdx": 0,
+    "explanation": "【见义勇为】(jiàn yì yǒng wéi) Courageous behavior for a just cause. It fits the hero scenario."
+  },
+  {
+    "category": "词语搭配",
+    "question": "老师把全班同学分成小组，大家正在展开 ________ 的讨论。",
+    "options": ["热烈", "热情", "热心", "热闹"],
+    "correctIdx": 0,
+    "explanation": "【热烈】(rè liè) Warm/Enthusiastic. '热烈讨论' is a fixed collocation in the P4 textbook."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 明天的体育课取消了，我 ________ 会觉得很失望。",
+    "options": ["如果...就", "不但...而且", "因为...所以", "虽然...但是"],
+    "correctIdx": 0,
+    "explanation": "【如果...就】(rú guǒ...jiù) If...then. Used for a hypothetical situation in the future."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "听到一阵巨大的【响】声，全屋的人都被吓了一跳。选出正确的拼音。",
+    "options": ["xiǎng", "xiàng", "xiāng", "qiǎng"],
+    "correctIdx": 0,
+    "explanation": "【响】(xiǎng) Sound/Noise. It is a third tone character."
+  },
+  {
+    "category": "辨析字",
+    "question": "妈妈轻轻地把弟弟叫 ________ 了，叫他起来去上学。",
+    "options": ["醒", "星", "形", "请"],
+    "correctIdx": 0,
+    "explanation": "【醒】(xǐng) Wake up. '叫醒' (wake up someone). It has the 'wine' radical (酉字旁)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那只壁虎在墙壁上快速地 ________，一会儿就不见了。",
+    "options": ["爬行", "跑步", "跳动", "飞行"],
+    "correctIdx": 0,
+    "explanation": "【爬行】(pá xíng) Crawl. Geckos and lizards move by crawling (爬行)."
+  },
+  {
+    "category": "词语搭配",
+    "question": "在民众俱乐部里，我们要 ________ 守则，不要大声说话。",
+    "options": ["遵守", "尊敬", "遵照", "准备"],
+    "correctIdx": 0,
+    "explanation": "【遵守】(zūn shǒu) Abide by. '遵守守则' (abide by the rules) is a standard pair."
+  },
+  {
+    "category": "关联词",
+    "question": "小明 ________ 平时练习很辛苦，________ 他从未想过要放弃。",
+    "options": ["虽然...但是", "因为...所以", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between the hard work and his perseverance."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "在这个四个【季】节中，我最喜欢百花盛开的春天。选出正确的拼音。",
+    "options": ["jì", "jí", "jī", "qì"],
+    "correctIdx": 0,
+    "explanation": "【季】(jì) Season. Fourth tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "他在民众俱乐部 ________ 钢琴表演，获得了一阵欢呼声。",
+    "options": ["弹", "谈", "但", "担"],
+    "correctIdx": 0,
+    "explanation": "【弹】(tán) To play (stringed instrument). '弹钢琴' (play piano)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "天空突然 ________，不一会儿就下起了倾盆大雨。",
+    "options": ["乌云密布", "阳光灿烂", "风和日丽", "明亮无比"],
+    "correctIdx": 0,
+    "explanation": "【乌云密布】(wū yún mì bù) Dark clouds gather. This logic always leads to 'pouring rain'."
+  },
+  {
+    "category": "词语搭配",
+    "question": "那个小男孩非常有 ________，打预防针时连哭都没哭。",
+    "options": ["勇敢", "力气", "兴趣", "秘密"],
+    "correctIdx": 0,
+    "explanation": "【勇敢】(yǒng gǎn) Brave. Being brave is associated with not crying during a vaccination."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 这里有告示牌说禁止玩耍，我们 ________ 不要进去乱跑了。",
+    "options": ["既然...就", "不但...而且", "虽然...但是", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【既然...就】(jì rán...jiù) Since...then. Used because the fact of the sign is already known."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "老师耐心地向我们【解】释这个词语的意思。选出正确的拼音。",
+    "options": ["jiě", "jié", "qiě", "jiè"],
+    "correctIdx": 0,
+    "explanation": "【解】(jiě) To explain. Third tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "那个小姑娘 ________ 起脚尖，想看看柜子上的东西。",
+    "options": ["踮", "点", "店", "电"],
+    "correctIdx": 0,
+    "explanation": "【踮】(diǎn) To stand on tiptoe. This is a specific P4 vocabulary word."
+  },
+  {
+    "category": "词义辨析",
+    "question": "经过一整天的武术训练，大家都感到十分 ________，想早点休息。",
+    "options": ["疲倦", "兴奋", "精彩", "充实"],
+    "correctIdx": 0,
+    "explanation": "【疲倦】(pí juàn) Tired/Exhausted. Appropriate after a long training session."
+  },
+  {
+    "category": "词语搭配",
+    "question": "由于天气炎热，我们在家里要 ________ 节约用水，减少浪费。",
+    "options": ["坚持", "坚定", "坚决", "坚硬"],
+    "correctIdx": 0,
+    "explanation": "【坚持】(jiān chí) Persist. '坚持节约用水' is a common phrase for a long-term habit."
+  },
+  {
+    "category": "关联词",
+    "question": "这里的冬天 ________ 非常寒冷，________ 经常刮大风。",
+    "options": ["不但...而且", "虽然...但是", "如果...就", "因为...所以"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Used here to add more descriptive negative traits of the winter weather."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "大家正在耐心地等【待】巴士的到来。选出正确的拼音。",
+    "options": ["dài", "dāi", "tài", "dái"],
+    "correctIdx": 0,
+    "explanation": "【待】(dài) To wait. Fourth tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "在这个四个季 ________ 中，我最喜欢冬天。",
+    "options": ["节", "结", "洁", "姐"],
+    "correctIdx": 0,
+    "explanation": "【节】(jié) Season. '季节' (season)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那个同学因为身体不舒服而一直在休息，显得 ________。",
+    "options": ["闷闷不乐", "兴高采烈", "得意洋洋", "见义勇为"],
+    "correctIdx": 0,
+    "explanation": "【闷闷不乐】(mèn mèn bù lè) Depressed/Unhappy. Sickness often causes a low mood."
+  },
+  {
+    "category": "词语搭配",
+    "question": "由于视力变 ________，小明不得不戴上了眼镜。",
+    "options": ["差", "好", "长", "多"],
+    "correctIdx": 0,
+    "explanation": "【差】(chà) Bad/Poor. '视力变差' (vision deteriorating)."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 他现在还是个小学生，________ 他已经非常懂事了。",
+    "options": ["虽然...但是", "因为...所以", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between his young age and mature behavior."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "警察正在【了】解意外发生的情况。选出正确的拼音。",
+    "options": ["liǎo", "le", "liào", "liāo"],
+    "correctIdx": 0,
+    "explanation": "【了】(liǎo) To understand/know. In '了解', it is third tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "妈妈正忙着在厨房里 ________ 面，准备全家人的晚餐。",
+    "options": ["煮", "者", "著", "署"],
+    "correctIdx": 0,
+    "explanation": "【煮】(zhǔ) To boil/cook. Uses the fire radical at the bottom."
+  },
+  {
+    "category": "词义辨析",
+    "question": "听了导游的 ________，大家对这里的植物园有了更多的认识。",
+    "options": ["介绍", "批评", "提醒", "表扬"],
+    "correctIdx": 0,
+    "explanation": "【介绍】(jiè shào) Introduction. Tour guides introduce attractions."
+  },
+  {
+    "category": "词语搭配",
+    "question": "我们要从小养成尊敬 ________ 的好习惯，对待老人要有礼貌。",
+    "options": ["长辈", "平辈", "晚辈", "长短"],
+    "correctIdx": 0,
+    "explanation": "【长辈】(zhǎng bèi) Elders. '尊敬长辈' is a core value in P4 education."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 你已经认识到自己插队是不对的，________ 应该向那位同学道歉。",
+    "options": ["既然...就", "虽然...但是", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【既然...就】Used for a logical conclusion based on a known fact (knowing the mistake)."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "那朵漂亮的蝴【蝶】正停在花瓣上。选出正确的拼音。",
+    "options": ["dié", "tié", "diě", "diē"],
+    "correctIdx": 0,
+    "explanation": "【蝶】(dié) Butterfly. Second tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "由于大雾，前方的景物看起来非常模 ________。",
+    "options": ["糊", "湖", "胡", "蝴"],
+    "correctIdx": 0,
+    "explanation": "【糊】(hú) Blurry. '模糊' (blurry/vague)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那个同学总是在老师不在时 ________，吵得大家无法安心学习。",
+    "options": ["大声喧哗", "安静阅读", "自言自语", "见义勇为"],
+    "correctIdx": 0,
+    "explanation": "【大声喧哗】(dà shēng xuān huá) Making loud noises. Disruptive behavior in class."
+  },
+  {
+    "category": "词语搭配",
+    "question": "看到小猴子可爱的样子，大家不约而同地 ________ 了过去。",
+    "options": ["围", "跑", "走", "看"],
+    "correctIdx": 0,
+    "explanation": "【围】(wéi) Surround. '围了过去' implies a crowd gathering around something interesting."
+  },
+  {
+    "category": "关联词",
+    "question": "他平时 ________ 喜欢看新闻，________ 也喜欢阅读词典。",
+    "options": ["不但...而且", "因为...所以", "虽然...但是", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Adding two similar habits/hobbies."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "他在学校的华乐团里表现十分优【秀】。选出正确的拼音。",
+    "options": ["xiù", "xiū", "xiǔ", "qiù"],
+    "correctIdx": 0,
+    "explanation": "【秀】(xiù) Excellent. Fourth tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "爸爸 ________ 负着重担，依然坚持送我去补习中心。",
+    "options": ["背", "辈", "北", "被"],
+    "correctIdx": 0,
+    "explanation": "【背】(bēi) To carry on the back. '背负' (to bear)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "由于他的 ________，大家终于顺利地救出了被困在车里的司机。",
+    "options": ["见义勇为", "灵机一动", "不耐烦", "自言自语"],
+    "correctIdx": 0,
+    "explanation": "【见义勇为】(jiàn yì yǒng wéi) Courageous act. Rescuing someone at risk."
+  },
+  {
+    "category": "词语搭配",
+    "question": "那名士兵正在校场上练习，步伐非常 ________。",
+    "options": ["整齐", "整洁", "整理", "整体"],
+    "correctIdx": 0,
+    "explanation": "【整齐】(zhěng qí) Neat/Orderly. Describing the military drill/stepping."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 他的身体长得矮小，________ 他在运动会上跑步跑得非常快。",
+    "options": ["虽然...但是", "因为...所以", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between height and speed."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "看到这种奇怪的现象，他感到十分【惊】奇。选出正确的拼音。",
+    "options": ["jīng", "qīng", "jìng", "jǐng"],
+    "correctIdx": 0,
+    "explanation": "【惊】(jīng) Surprised. First tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "看到好朋友获奖，我也为他感到非常 ________ 幸。",
+    "options": ["幸", "辛", "信", "星"],
+    "correctIdx": 0,
+    "explanation": "【幸】(xìng) Lucky/Happy. '幸运' (lucky)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那个同学因为在食堂插队而被老师 ________，心里感到很后悔。",
+    "options": ["批评", "表扬", "感谢", "建议"],
+    "correctIdx": 0,
+    "explanation": "【批评】(pī píng) Criticize. Cutting queue is bad behavior that deserves criticism."
+  },
+  {
+    "category": "词语搭配",
+    "question": "导游正在为大家 ________ 这里的名胜古迹。",
+    "options": ["介绍", "解释", "解答", "解决"],
+    "correctIdx": 0,
+    "explanation": "【介绍】(jiè shào) Introduce. Guides introduce landmarks."
+  },
+  {
+    "category": "关联词",
+    "question": "这件衣服 ________ 样子不好看，________ 穿起来很舒服。",
+    "options": ["虽然...但是", "不但...而且", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between appearance and comfort."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "我们要养成每天读新【闻】的好习惯。选出正确的拼音。",
+    "options": ["wén", "wèn", "mén", "wěn"],
+    "correctIdx": 0,
+    "explanation": "【闻】(wén) News. Second tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "他办事很有耐 ________，从不轻言放弃。",
+    "options": ["心", "新", "欣", "星"],
+    "correctIdx": 0,
+    "explanation": "【心】(xīn) Heart. '耐心' (patience)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "在四个季节中，冬天是最 ________ 的季节，我们需要穿上厚毛衣。",
+    "options": ["寒冷", "凉爽", "炎热", "温暖"],
+    "correctIdx": 0,
+    "explanation": "【寒冷】(hán lěng) Freezing/Cold. Factually correct description of winter."
+  },
+  {
+    "category": "词语搭配",
+    "question": "我们在熟食中心要自发地 ________ 碗盘，方便其他人用餐。",
+    "options": ["归还", "放回", "清洗", "购买"],
+    "correctIdx": 0,
+    "explanation": "【归还】(guī huán) Return. Standard Singapore collocation for trays/crockery."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 明天的户外表演取消了，我 ________ 不会感到失望。",
+    "options": ["即使...也", "虽然...但是", "因为...所以", "不但...而且"],
+    "correctIdx": 0,
+    "explanation": "【即使...也】(jí shǐ...yě) Even if...also. Used for making a concession about a hypothetical future event."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "看到这种【危】险的行为，大家都忍不住叫了起来。选出正确的拼音。",
+    "options": ["wēi", "wéi", "wěi", "ūi"],
+    "correctIdx": 0,
+    "explanation": "【危】(wēi) Dangerous. First tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "妈妈今天工作很累，现在已经 ________ 了下来，休息了。",
+    "options": ["躺", "趟", "糖", "汤"],
+    "correctIdx": 0,
+    "explanation": "【躺】(tǎng) To lie down. Uses the body radical (身字旁)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "看到好朋友获奖了，我 ________ 地为他感到高兴。",
+    "options": ["打心底里", "表面上", "垂头丧气", "没礼貌"],
+    "correctIdx": 0,
+    "explanation": "【打心底里】(dǎ xīn dǐ lǐ) From the bottom of the heart. Sincere happiness for a friend."
+  },
+  {
+    "category": "词语搭配",
+    "question": "那位警察正在事故现场 ________ 情况，准备向上级报告。",
+    "options": ["了解", "理解", "解决", "解释"],
+    "correctIdx": 0,
+    "explanation": "【了解】(liǎo jiě) Understand/Find out. Standard procedure at an accident scene."
+  },
+  {
+    "category": "关联词",
+    "question": "这里的夏天 ________ 炎热，________ 非常潮湿。",
+    "options": ["不但...而且", "虽然...但是", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Adding two descriptive weather traits."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "他在民众俱乐部【弹】钢琴。选出正确的拼音。",
+    "options": ["tán", "dàn", "tǎn", "tàn"],
+    "correctIdx": 0,
+    "explanation": "【弹】(tán) To play. In the context of piano, it is 'tán'."
+  },
+  {
+    "category": "辨析字",
+    "question": "虽然他做错了事，但是只要肯 ________ 认错误，大家还是会原谅他的。",
+    "options": ["承", "成", "程", "称"],
+    "correctIdx": 0,
+    "explanation": "【承】(chéng) To bear/accept. '承认' (admit)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那部电视剧共有三十集，每集都非常 ________，引人入胜。",
+    "options": ["精彩", "疲倦", "辛苦", "危险"],
+    "correctIdx": 0,
+    "explanation": "【精彩】(jīng cǎi) Exciting/Brilliant. Standard adjective for media content."
+  },
+  {
+    "category": "词语搭配",
+    "question": "在食堂排队买饭时，我们要有 ________，不要乱抢。",
+    "options": ["秩序", "规则", "计划", "道理"],
+    "correctIdx": 0,
+    "explanation": "【秩序】(zhì xù) Order. '有秩序' (orderly)."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 他年纪已经很大了，________ 他依然坚持每天跑步。",
+    "options": ["虽然...但是", "因为...所以", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between old age and active lifestyle."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "听到这个消息，大家都【兴】奋地叫了起来。选出正确的拼音。",
+    "options": ["xīng", "xìng", "qīng", "xíng"],
+    "correctIdx": 0,
+    "explanation": "【兴】(xīng) Excited. In '兴奋', it is first tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "那个小男孩 ________ 自言自语地在街上走着。",
+    "options": ["正", "政", "证", "挣"],
+    "correctIdx": 0,
+    "explanation": "【正】(zhèng) Currently/Specifically. '正在/正是'."
+  },
+  {
+    "category": "词义辨析",
+    "question": "由于突发大火，居民们都在消防员的指挥下 ________ 地离开了组屋区。",
+    "options": ["有秩序", "乱抢", "自言自语", "闷闷不乐"],
+    "correctIdx": 0,
+    "explanation": "【有秩序】(yǒu zhì xù) Orderly. Safe evacuation requires order."
+  },
+  {
+    "category": "词语搭配",
+    "question": "由于视力下降，他以后要注意眼部 ________，不要近距离看书。",
+    "options": ["卫生", "清洁", "健康", "保护"],
+    "correctIdx": 0,
+    "explanation": "【卫生】(wèi shēng) Hygiene. '眼部卫生' (eye hygiene)."
+  },
+  {
+    "category": "关联词",
+    "question": "这件雨衣 ________ 很轻便，________ 防水效果非常好。",
+    "options": ["不但...而且", "虽然...但是", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Listing two strengths of the raincoat."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "我们要学会克【服】困难。选出正确的拼音。",
+    "options": ["fú", "fù", "hú", "pú"],
+    "correctIdx": 0,
+    "explanation": "【服】(fú) To overcome (服 is the suffix here). Second tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "他在考试中取得了 ________ 秀的成绩，大家都为他感到高兴。",
+    "options": ["优", "由", "由", "犹"],
+    "correctIdx": 0,
+    "explanation": "【优】(yōu) Excellent. '优秀' (excellent)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "由于他经常 ________，大家都不太愿意相信他说的话。",
+    "options": ["说谎", "道歉", "解释", "见义勇为"],
+    "correctIdx": 0,
+    "explanation": "【说谎】(shuō huǎng) To lie. Liars lose people's trust."
+  },
+  {
+    "category": "词语搭配",
+    "question": "他在学校的武术训练中表现非常 ________，被选为新队长。",
+    "options": ["努力", "勤快", "热烈", "兴奋"],
+    "correctIdx": 0,
+    "explanation": "【努力】(nǔ lì) Hardworking. Hard work leads to leadership positions."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 明天天晴，我们 ________ 去海边玩耍。",
+    "options": ["如果...就", "虽然...但是", "不但...而且", "因为...所以"],
+    "correctIdx": 0,
+    "explanation": "【如果...就】Hypothetical condition for good weather."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "那是由于他长得太矮【小】了。选出正确的拼音。",
+    "options": ["xiǎo", "xiāo", "xiào", "qiǎo"],
+    "correctIdx": 0,
+    "explanation": "【小】(xiǎo) Small. Third tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "我们在学校餐厅用餐后，要 ________ 觉地把餐具收好。",
+    "options": ["自", "字", "只", "之"],
+    "correctIdx": 0,
+    "explanation": "【自】(zì) Self. '自觉' (self-aware/automatic)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "由于刚才发生了一场车祸，现场的情况非常 ________，到处都是碎片。",
+    "options": ["混乱", "精彩", "凉爽", "整齐"],
+    "correctIdx": 0,
+    "explanation": "【混乱】(hùn luàn) Messy/Chaotic. Describing the scene of an accident."
+  },
+  {
+    "category": "词语搭配",
+    "question": "为了保护环境，我们要养成少用 ________ 袋的习惯。",
+    "options": ["塑料", "玻璃", "金属", "木头"],
+    "correctIdx": 0,
+    "explanation": "【塑料】(sù liào) Plastic. '塑料袋' (plastic bag) is the target P4 word."
+  },
+  {
+    "category": "关联词",
+    "question": "这本词典 ________ 解释详细，________ 还有很多精美的图片。",
+    "options": ["不但...而且", "虽然...但是", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Adding positive features to the dictionary."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "企鹅们正笨【拙】地向前走着。选出正确的拼音。",
+    "options": ["zhuō", "zhuó", "zhuò", "zuō"],
+    "correctIdx": 0,
+    "explanation": "【拙】(zhuō) Clumsy. First tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "那位老人虽然已经 ________ 十岁了，但身体依然很健康。",
+    "options": ["六", "路", "力", "立"],
+    "correctIdx": 0,
+    "explanation": "【六】(liù) Six. '六十' (sixty)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "看到好朋友因为丢了钱包而难过，我立刻上前安慰，并对他表示了 ________。",
+    "options": ["同情", "赞许", "批评", "不耐烦"],
+    "correctIdx": 0,
+    "explanation": "【同情】(tóng qíng) Sympathy. Proper response to a friend's loss."
+  },
+  {
+    "category": "词语搭配",
+    "question": "在那部电视剧里，主角扮演了一个非常有 ________ 的英雄。",
+    "options": ["勇气", "力气", "心情", "道理"],
+    "correctIdx": 0,
+    "explanation": "【勇气】(yǒng qì) Courage. Heroes are defined by courage."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 你肯努力，最后 ________ 一定会取得成功的。",
+    "options": ["只要...就", "虽然...但是", "不但...而且", "既然...就"],
+    "correctIdx": 0,
+    "explanation": "【只要...就】(zhǐ yào...jiù) Expresses a sufficient condition for success."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "我们要养成【尊】敬长辈的好习惯。选出正确的拼音。",
+    "options": ["zūn", "zhūn", "zǔn", "sūn"],
+    "correctIdx": 0,
+    "explanation": "【尊】(zūn) Respect. Flat tongue sound (平舌音), first tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "在那扇木门后，藏着一个不为人知的 ________ 密。",
+    "options": ["秘", "蜜", "名", "目"],
+    "correctIdx": 0,
+    "explanation": "【秘】(mì) Secret. '秘密' (secret)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "由于刚才在学校受了老师的表扬，小明一整天都表现得 ________。",
+    "options": ["兴高采烈", "闷闷不乐", "垂头丧气", "怒气冲冲"],
+    "correctIdx": 0,
+    "explanation": "【兴高采烈】(xìng gāo cǎi liè) Very happy/Exuberant. Result of being praised."
+  },
+  {
+    "category": "词语搭配",
+    "question": "在这个四个季节中，冬天是最 ________ 的，要戴上手套和帽子。",
+    "options": ["寒冷", "炎热", "凉爽", "温暖"],
+    "correctIdx": 0,
+    "explanation": "【寒冷】(hán lěng) Freezing. Consistent with winter clothing requirements."
+  },
+  {
+    "category": "关联词",
+    "question": "这里的风景 ________ 很美，________ 交通也很方便，吸引了很多游客。",
+    "options": ["不但...而且", "虽然...但是", "因为...所以", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【不但...而且】Listing two attractions of a place."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "那是由于他长得【太】矮小了。选出正确的拼音。",
+    "options": ["tài", "tái", "dài", "tài"],
+    "correctIdx": 0,
+    "explanation": "【太】(tài) Too. Fourth tone."
+  },
+  {
+    "category": "辨析字",
+    "question": "我们要 ________ 先排队，做一个有礼貌的好学生。",
+    "options": ["争", "正", "睁", "征"],
+    "correctIdx": 0,
+    "explanation": "【争】(zhēng) To compete/strive. '争先恐后' (scramble)."
+  },
+  {
+    "category": "词义辨析",
+    "question": "那部电视剧共有三十集，情节非常精彩，让我一读就 ________ 进去了。",
+    "options": ["迷", "走", "看", "读"],
+    "correctIdx": 0,
+    "explanation": "【迷】(mí) Obsessed/Hooked. '迷上/迷进去' (to be captivated)."
+  },
+  {
+    "category": "词语搭配",
+    "question": "我们在熟食中心要 ________ 排队，不要插队。",
+    "options": ["有秩序地", "乱抢地", "自言自语地", "不耐烦地"],
+    "correctIdx": 0,
+    "explanation": "【有秩序地】(yǒu zhì xù dì) In an orderly manner. Proper behavior for queuing."
+  },
+  {
+    "category": "关联词",
+    "question": "________ 他的家境并不富裕，________ 他学习非常努力。",
+    "options": ["虽然...但是", "因为...所以", "不但...而且", "如果...就"],
+    "correctIdx": 0,
+    "explanation": "【虽然...但是】Contrast between poor background and hard study."
+  },
+  {
+    "category": "汉语拼音",
+    "question": "那朵漂亮的蝴【蝶】正停在花盆上。选出正确的拼音。",
+    "options": ["dié", "tié", "diě", "diē"],
+    "correctIdx": 0,
+    "explanation": "【蝶】(dié) Butterfly. Second tone."
+  }
+    ];
+
+    let currentSet = [];
+    let currentIdx = 0;
+    let score = 0;
+    let selectedIdx = null;
+
+    function generateNewSet() {
+        score = 0;
+        currentIdx = 0;
+        // Randomly pick 10 questions from the P4 bank
+        currentSet = [...p4Bank].sort(() => 0.5 - Math.random()).slice(0, 10);
+        document.getElementById('result-ui').style.display = 'none';
+        document.getElementById('quiz-ui').style.display = 'block';
+        showQuestion();
+    }
+
+    function showQuestion() {
+        const q = currentSet[currentIdx];
+        document.getElementById('q-counter').innerText = `第 ${currentIdx + 1} 题 / 共 10 题`;
+        document.getElementById('prog-bar').style.width = `${(currentIdx / 10) * 100}%`;
+        document.getElementById('q-cat').innerText = q.category;
+        document.getElementById('q-text').innerText = q.question;
+        
+        const grid = document.getElementById('opt-grid');
+        grid.innerHTML = '';
+        selectedIdx = null;
+        
+        document.getElementById('feedback').style.display = 'none';
+        document.getElementById('btn-confirm').style.display = 'block';
+        document.getElementById('btn-confirm').disabled = true;
+        document.getElementById('btn-next').style.display = 'none';
+
+        q.options.forEach((opt, i) => {
+            const btn = document.createElement('button');
+            btn.className = 'opt-btn';
+            btn.innerText = `${i + 1}. ${opt}`;
+            btn.onclick = () => {
+                selectedIdx = i;
+                document.querySelectorAll('.opt-btn').forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                document.getElementById('btn-confirm').disabled = false;
+            };
+            grid.appendChild(btn);
+        });
+    }
+
+    function confirmAnswer() {
+        const q = currentSet[currentIdx];
+        const isCorrect = selectedIdx === q.correctIdx;
+        if(isCorrect) score++;
+
+        const fb = document.getElementById('feedback');
+        fb.className = `feedback ${isCorrect ? 'correct' : 'wrong'}`;
+        fb.innerHTML = `<strong>${isCorrect ? '答对了！太棒了！' : '没关系，再接再厉！'}</strong><br>${q.explanation}`;
+        fb.style.display = 'block';
+
+        document.getElementById('btn-confirm').style.display = 'none';
+        document.getElementById('btn-next').style.display = 'block';
+        document.querySelectorAll('.opt-btn').forEach(b => b.style.pointerEvents = 'none');
+    }
+
+    function nextQuestion() {
+        currentIdx++;
+        if(currentIdx < 10) {
+            showQuestion();
+        } else {
+            showResult();
+        }
+    }
+
+    function showResult() {
+        document.getElementById('quiz-ui').style.display = 'none';
+        document.getElementById('result-ui').style.display = 'block';
+        document.getElementById('final-score').innerText = `${score} / 10`;
+        
+        let praise = "";
+        if(score === 10) praise = "太完美了！你是华文小达人！";
+        else if(score >= 7) praise = "表现得很好！继续加油！";
+        else praise = "多练习几次，你一定会进步的！";
+        document.getElementById('praise-text').innerText = praise;
+    }
+
+    window.onload = generateNewSet;
+</script>
+</body>
+</html>
